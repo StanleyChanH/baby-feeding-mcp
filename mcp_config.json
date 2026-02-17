@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "baby-feeding": {
+      "command": "python",
+      "args": ["server.py"],
+      "env": {
+        "BABY_TOKEN": "${BABY_TOKEN}",
+        "BABY_ID": "${BABY_ID}",
+        "COMMON_BABY_ID": "${COMMON_BABY_ID}",
+        "BABY_BIRTHDAY": "${BABY_BIRTHDAY}"
+      }
+    }
+  }
+}
