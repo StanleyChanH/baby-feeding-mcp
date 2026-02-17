@@ -25,3 +25,4 @@ Thumbs.db
 
 # Lock files (optional)
 # uv.lock
+.claude/
