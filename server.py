@@ -293,8 +293,8 @@ class BabyRecorder:
 
                 last_record["time_ago"] = time_ago
                 last_record["hours_since"] = hours + minutes / 60
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"时间计算失败: {start_at}, 错误: {e}")
 
         return {"success": True, "record": last_record}
 
@@ -506,6 +506,16 @@ def get_recent_records(size: int = 20) -> dict:
         return {"success": False, "message": str(e)}
 
 
+def validate_config():
+    """启动时验证必要的环境变量配置"""
+    required = ["BABY_TOKEN", "BABY_ID", "COMMON_BABY_ID", "BABY_BIRTHDAY"]
+    missing = [k for k in required if not os.getenv(k)]
+    if missing:
+        raise ValueError(f"缺少环境变量: {', '.join(missing)}")
+    logger.info("配置验证通过")
+
+
 # 启动服务器
 if __name__ == "__main__":
+    validate_config()
     mcp.run(transport="stdio")
