@@ -22,15 +22,17 @@ mcp = FastMCP("BabyFeedingRecord")
 class BabyRecorder:
     """宝宝抚养记录API客户端"""
 
-    def __init__(self, token, baby_id, common_baby_id, birthday_str):
+    def __init__(self, token, baby_id, common_baby_id, birthday_str, baby_gender=1):
         self.url = "https://api-bbj.meiyou.com/v3/life/record"
         self.baby_id = baby_id
         self.common_baby_id = common_baby_id
+        self.baby_gender = baby_gender  # 0=女孩, 1=男孩
+        self.birthday = None
 
         try:
-            dt = datetime.strptime(birthday_str, "%Y-%m-%d")
-            self.birthday_ms = int(dt.timestamp() * 1000)
-            logger.info(f"初始化完成: 生日 {birthday_str}")
+            self.birthday = datetime.strptime(birthday_str, "%Y-%m-%d")
+            self.birthday_ms = int(self.birthday.timestamp() * 1000)
+            logger.info(f"初始化完成: 生日 {birthday_str}, 性别 {'男孩' if baby_gender == 1 else '女孩'}")
         except ValueError:
             logger.error(f"生日格式错误: {birthday_str}")
             self.birthday_ms = 0
@@ -298,6 +300,73 @@ class BabyRecorder:
 
         return {"success": True, "record": last_record}
 
+    def _calc_age_params(self):
+        """计算宝宝年龄参数，用于每日变化API"""
+        if not self.birthday:
+            return None
+
+        today = datetime.now()
+        parenting_info = (today - self.birthday).days
+        parenting_year = parenting_info // 365
+        remaining_days = parenting_info % 365
+        month_of_year = remaining_days // 30
+        day_of_month = remaining_days % 30
+
+        return {
+            "parenting_info": parenting_info,
+            "parenting_year": parenting_year,
+            "month_of_year": month_of_year,
+            "day_of_month": day_of_month,
+            "baby_gender": self.baby_gender
+        }
+
+    def get_daily_change(self, birthday_str):
+        """获取宝宝每日变化建议"""
+        age_params = self._calc_age_params()
+        if not age_params:
+            return {"success": False, "message": "生日配置错误，无法计算年龄"}
+
+        url = "https://gravidity.seeyouyima.com/v3/baby_grow/baby_change"
+
+        # 转换生日格式：2025-08-21 -> 20250821
+        bbday = birthday_str.replace("-", "")
+
+        headers = {
+            **self.headers,
+            "bbid": str(self.common_baby_id),
+            "bbday": bbday,
+            "linggan_access_info": "***REMOVED***",
+            "linggan_access_token": "***REMOVED***",
+            "x-visit-mode": "1",
+            "user-agent": self.headers["ua"]
+        }
+        if "Content-Type" in headers:
+            del headers["Content-Type"]
+
+        try:
+            response = requests.get(url, headers=headers, params=age_params)
+            if response.status_code == 200:
+                res = response.json()
+                if res.get("code") == 0:
+                    logger.info(f"获取每日变化建议成功")
+                    data = res.get("data", {})
+                    hw = data.get("hw", {})
+                    return {
+                        "success": True,
+                        "content": data.get("content", ""),
+                        "height_min": hw.get("height_min", ""),
+                        "height_max": hw.get("height_max", ""),
+                        "weight_min": hw.get("weight_min", ""),
+                        "weight_max": hw.get("weight_max", "")
+                    }
+                else:
+                    return {"success": False, "message": res.get('message', '未知错误')}
+            else:
+                return {"success": False, "message": f"HTTP错误: {response.status_code}"}
+        except Exception as e:
+            logger.error(f"获取每日变化建议异常: {e}")
+            return {"success": False, "message": f"网络异常: {str(e)}"}
+
 
 # 从环境变量加载配置
 def get_recorder():
@@ -306,11 +375,12 @@ def get_recorder():
     baby_id = os.getenv("BABY_ID")
     common_baby_id = os.getenv("COMMON_BABY_ID")
     birthday = os.getenv("BABY_BIRTHDAY")
+    baby_gender = int(os.getenv("BABY_GENDER", "1"))  # 默认男孩
 
     if not all([token, baby_id, common_baby_id, birthday]):
         raise ValueError("请配置环境变量: BABY_TOKEN, BABY_ID, COMMON_BABY_ID, BABY_BIRTHDAY")
 
-    return BabyRecorder(token, int(baby_id), int(common_baby_id), birthday)
+    return BabyRecorder(token, int(baby_id), int(common_baby_id), birthday, baby_gender)
 
 
 # ============ MCP 工具定义 ============
@@ -501,6 +571,22 @@ def get_recent_records(size: int = 20) -> dict:
                     })
 
             return {"success": True, "records": records_summary[:size]}
+        return result
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def get_daily_change() -> dict:
+    """
+    获取宝宝每日变化建议。当用户问"宝宝今天有什么变化"、"宝宝发育建议"等问题时使用此工具。
+
+    返回宝宝每日发育建议内容，以及当前月龄对应的身高体重参考范围。
+    """
+    try:
+        recorder = get_recorder()
+        birthday = os.getenv("BABY_BIRTHDAY")
+        result = recorder.get_daily_change(birthday)
         return result
     except Exception as e:
         return {"success": False, "message": str(e)}

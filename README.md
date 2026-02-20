@@ -15,6 +15,7 @@
 | `record_water` | 记录喝水 | 喝水、喂水 |
 | `get_last_record` | 获取最近一次记录 | 最近一次喂奶、上次换尿布 |
 | `get_recent_records` | 获取最近记录列表 | 今天喂了几次 |
+| `get_daily_change` | 获取每日变化建议 | 宝宝发育建议、身高体重参考 |
 
 ## 安装
 
@@ -49,6 +50,7 @@ BABY_TOKEN=XDS your_token_here
 BABY_ID=123456789
 COMMON_BABY_ID=987654321
 BABY_BIRTHDAY=2025-08-20
+BABY_GENDER=1
 ```
 
 ### 配置项说明
@@ -60,6 +62,7 @@ BABY_BIRTHDAY=2025-08-20
 | `BABY_ID` | 宝宝ID |
 | `COMMON_BABY_ID` | 通用宝宝ID |
 | `BABY_BIRTHDAY` | 宝宝生日，格式 YYYY-MM-DD |
+| `BABY_GENDER` | 宝宝性别，0=女孩，1=男孩（默认） |
 
 ## 运行
 
@@ -173,6 +176,17 @@ get_recent_records(
     size: int = 20  # 获取数量，默认20
 )
 ```
+
+### get_daily_change（获取每日变化建议）
+
+```python
+get_daily_change()  # 无参数
+```
+
+返回：
+- `content`：每日发育建议内容
+- `height_min` / `height_max`：身高参考范围（cm）
+- `weight_min` / `weight_max`：体重参考范围（kg）
 
 ## 目录结构
 
