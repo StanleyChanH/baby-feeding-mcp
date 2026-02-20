@@ -16,6 +16,7 @@
 | `get_last_record` | 获取最近一次记录 | 最近一次喂奶、上次换尿布 |
 | `get_recent_records` | 获取最近记录列表 | 今天喂了几次 |
 | `get_daily_change` | 获取每日变化建议 | 宝宝发育建议、身高体重参考 |
+| `get_baby_info` | 获取宝宝基本信息 | 宝宝多大、宝宝生日、宝宝性别 |
 
 ## 安装
 
@@ -187,6 +188,18 @@ get_daily_change()  # 无参数
 - `content`：每日发育建议内容
 - `height_min` / `height_max`：身高参考范围（cm）
 - `weight_min` / `weight_max`：体重参考范围（kg）
+
+### get_baby_info（获取宝宝基本信息）
+
+```python
+get_baby_info()  # 无参数
+```
+
+返回：
+- `birthday`：宝宝生日（YYYY-MM-DD）
+- `gender`：宝宝性别（男孩/女孩）
+- `age_days`：宝宝出生天数
+- `age_str`：宝宝年龄描述（如"5个月"）
 
 ## 目录结构
 

@@ -592,6 +592,48 @@ def get_daily_change() -> dict:
         return {"success": False, "message": str(e)}
 
 
+@mcp.tool()
+def get_baby_info() -> dict:
+    """
+    获取宝宝基本信息。当用户问"宝宝多大"、"宝宝生日是什么时候"、"宝宝是男是女"等问题时使用此工具。
+
+    返回宝宝生日、性别、年龄等信息。
+    """
+    try:
+        birthday = os.getenv("BABY_BIRTHDAY")
+        baby_gender = int(os.getenv("BABY_GENDER", "1"))
+
+        if not birthday:
+            return {"success": False, "message": "未配置宝宝生日"}
+
+        # 计算年龄
+        try:
+            birthday_dt = datetime.strptime(birthday, "%Y-%m-%d")
+            today = datetime.now()
+            days = (today - birthday_dt).days
+            months = days // 30
+            years = days // 365
+            remaining_months = (days % 365) // 30
+
+            if years > 0:
+                age_str = f"{years}岁{remaining_months}个月"
+            else:
+                age_str = f"{months}个月"
+        except ValueError:
+            age_str = "未知"
+
+        return {
+            "success": True,
+            "birthday": birthday,
+            "gender": "男孩" if baby_gender == 1 else "女孩",
+            "gender_code": baby_gender,
+            "age_days": days,
+            "age_str": age_str
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
 def validate_config():
     """启动时验证必要的环境变量配置"""
     required = ["BABY_TOKEN", "BABY_ID", "COMMON_BABY_ID", "BABY_BIRTHDAY"]
