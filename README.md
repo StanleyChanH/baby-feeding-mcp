@@ -18,93 +18,65 @@
 | `get_daily_change` | 获取每日变化建议 | 宝宝发育建议、身高体重参考 |
 | `get_baby_info` | 获取宝宝基本信息 | 宝宝多大、宝宝生日、宝宝性别 |
 
-## 安装
+## 快速开始（Docker Compose，推荐）
 
-```bash
-cd baby-feeding-mcp
-pip install -r requirements.txt
-```
-
-或使用 uv：
-
-```bash
-uv venv
-uv pip install -r requirements.txt
-```
-
-## 配置
-
-1. 复制环境变量模板：
+1. 复制环境变量模板并填写：
 
 ```bash
 cp .env.example .env
+# 编辑 .env，填入 MCP_ENDPOINT / BABY_TOKEN / BABY_ID 等
 ```
 
-2. 编辑 `.env` 文件，填入你的配置：
+2. 启动：
 
-```env
-# 小智AI MCP接入点（从小智AI控制台获取）
-MCP_ENDPOINT=wss://api.xiaozhi.me/mcp/?token=你的token
-
-# 宝宝抚养记录API配置
-BABY_TOKEN=XDS your_token_here
-BABY_ID=123456789
-COMMON_BABY_ID=987654321
-BABY_BIRTHDAY=2025-08-20
-BABY_GENDER=1
+```bash
+docker compose up -d --build
+docker compose logs -f
 ```
+
+容器内 `mcp2xiaozhi` 会自动连接小智AI 并桥接 `server.py` 的 MCP 工具。断线自动重连。
 
 ### 配置项说明
 
 | 变量 | 说明 |
 |------|------|
 | `MCP_ENDPOINT` | 小智AI的MCP WebSocket接入点 |
-| `BABY_TOKEN` | 美柚API的授权Token |
+| `BABY_TOKEN` | 美柚API的授权Token（含空格务必加引号） |
 | `BABY_ID` | 宝宝ID |
 | `COMMON_BABY_ID` | 通用宝宝ID |
 | `BABY_BIRTHDAY` | 宝宝生日，格式 YYYY-MM-DD |
 | `BABY_GENDER` | 宝宝性别，0=女孩，1=男孩（默认） |
+| `LINGGAN_ACCESS_TOKEN` | 每日变化建议API凭据（可选，留空则该工具不可用） |
+| `LINGGAN_ACCESS_INFO` | 同上 |
+| `TZ` | 容器时区，默认 Asia/Shanghai |
+| `LOG_LEVEL` | 日志级别，默认 INFO |
 
-## 运行
+## 本地开发（不使用 Docker）
 
-### 方式一：直接运行
-
-```bash
-python mcp_pipe.py server.py
-```
-
-### 方式二：systemd 服务（推荐生产环境）
+需要 Python 3.11-3.12 与 [uv](https://docs.astral.sh/uv/)：
 
 ```bash
-# 创建服务文件
-sudo nano /etc/systemd/system/baby-feeding-mcp.service
+uv sync
+# 直接调试 server.py（stdio）
+uv run python server.py
+# 或经 mcp2xiaozhi 桥接
+uv run mcp2xiaozhi run --all
 ```
 
-内容：
-```ini
-[Unit]
-Description=Baby Feeding MCP Server for XiaoZhi AI
-After=network.target
+## 国内镜像加速
 
-[Service]
-Type=simple
-User=你的用户名
-WorkingDirectory=/path/to/baby-feeding-mcp
-EnvironmentFile=/path/to/baby-feeding-mcp/.env
-ExecStart=/path/to/baby-feeding-mcp/.venv/bin/python mcp_pipe.py server.py
-Restart=always
-RestartSec=10
+构建时 pip 与 apt 已在 Dockerfile 内指向清华源。基础镜像 `python:3.12-slim` 默认从 Docker Hub 拉取，国内建议在 `/etc/docker/daemon.json` 配置 registry-mirrors：
 
-[Install]
-WantedBy=multi-user.target
+```json
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://hub-mirror.c.163.com"
+  ]
+}
 ```
 
-启动：
-```bash
-sudo systemctl daemon-reload
-sudo systemctl start baby-feeding-mcp
-sudo systemctl enable baby-feeding-mcp
-```
+配置后 `sudo systemctl restart docker`。
 
 ## 工具参数详解
 
@@ -205,15 +177,16 @@ get_baby_info()  # 无参数
 
 ```
 baby-feeding-mcp/
-├── server.py           # MCP Server 主程序
-├── mcp_pipe.py         # WebSocket 管道（连接小智AI）
-├── mcp_config.json     # MCP 服务配置
-├── .env.example        # 环境变量模板
-├── .env                # 环境变量（需自行创建）
-├── requirements.txt    # Python 依赖
-├── pyproject.toml      # 项目配置
-├── start.sh            # 启动脚本
-└── README.md           # 说明文档
+├── server.py            # MCP Server 主程序（FastMCP 工具）
+├── mcp_config.json      # mcp2xiaozhi 服务定义
+├── Dockerfile           # 镜像构建（uv + 国内源）
+├── docker-compose.yml   # 编排
+├── .dockerignore
+├── .env.example         # 环境变量模板
+├── .env                 # 环境变量（自行创建，不提交）
+├── pyproject.toml       # 项目与依赖配置（uv 管理）
+├── uv.lock              # 依赖锁文件
+└── README.md
 ```
 
 ## 注意事项
@@ -222,7 +195,7 @@ baby-feeding-mcp/
 
 2. **返回值限制**：工具返回值限制在约 1024 字节内
 
-3. **自动重连**：`mcp_pipe.py` 内置自动重连机制，断线后会指数退避重试
+3. **自动重连**：`mcp2xiaozhi` 内置抖动指数退避重连，断线自动恢复
 
 4. **工具命名**：工具名和参数名要清晰明了，让大模型能理解用途
 
