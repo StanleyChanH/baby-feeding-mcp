@@ -32,6 +32,35 @@ REQUEST_TIMEOUT = (5, 15)
 mcp = FastMCP("BabyFeedingRecord")
 
 
+def _age_components(birthday, today):
+    """用真实日历计算年龄，返回 (years, months, days, total_days)。
+
+    旧的 //365 + //30 写法在边界处出错：364 天显示「12 个月」、365 天显示「1 岁 0 个月」。
+    日历算法按年/月/日分量借位，与人类计数一致。
+    """
+    import calendar as _cal
+    total_days = (today - birthday).days
+
+    years = today.year - birthday.year
+    months = today.month - birthday.month
+    days = today.day - birthday.day
+
+    if days < 0:
+        months -= 1
+        # 借上一个月的天数
+        prev_month = today.month - 1 or 12
+        prev_year = today.year if today.month != 1 else today.year - 1
+        days += _cal.monthrange(prev_year, prev_month)[1]
+        # 月末生日（如 31 号）在短月仍可能为负，钳为 0，避免给 API 传负数天
+        if days < 0:
+            days = 0
+    if months < 0:
+        years -= 1
+        months += 12
+
+    return years, months, days, total_days
+
+
 class BabyRecorder:
     """宝宝抚养记录API客户端"""
 
@@ -62,16 +91,21 @@ class BabyRecorder:
         self.session = requests.Session()
 
     def _get_times(self, start_at=None, end_at=None, duration_minutes=10):
-        """智能时间计算"""
+        """智能时间计算。start_at 格式非法时抛 ValueError（由工具层转为错误返回），
+        不再静默用 now() 记错时间。"""
         fmt = "%Y-%m-%d %H:%M:%S"
+        now = datetime.now()
 
         if start_at:
             try:
                 start_dt = datetime.strptime(start_at, fmt)
-            except ValueError:
-                start_dt = datetime.now()
+            except ValueError as e:
+                logger.warning(f"start_at 格式无效，已拒绝记录: {start_at} ({e})")
+                raise ValueError(f"start_at 格式应为 {fmt}，收到: {start_at}") from e
+            if start_dt > now:
+                logger.warning(f"start_at 晚于当前时间: {start_at}")
         else:
-            start_dt = datetime.now()
+            start_dt = now
 
         if end_at:
             end_str = end_at
@@ -167,6 +201,8 @@ class BabyRecorder:
         s_time, e_time = self._get_times(start_at, end_at, duration_minutes=15)
 
         payload = {
+            "baby_id": self.baby_id,
+            "birthday": self.birthday_ms,
             "client_rid": 17,
             "common_baby_id": self.common_baby_id,
             "draft_id": 0,
@@ -325,17 +361,13 @@ class BabyRecorder:
             return None
 
         today = datetime.now()
-        parenting_info = (today - self.birthday).days
-        parenting_year = parenting_info // 365
-        remaining_days = parenting_info % 365
-        month_of_year = remaining_days // 30
-        day_of_month = remaining_days % 30
+        years, months, days, total_days = _age_components(self.birthday, today)
 
         return {
-            "parenting_info": parenting_info,
-            "parenting_year": parenting_year,
-            "month_of_year": month_of_year,
-            "day_of_month": day_of_month,
+            "parenting_info": total_days,
+            "parenting_year": years,
+            "month_of_year": months,
+            "day_of_month": days,
             "baby_gender": self.baby_gender
         }
 
@@ -556,7 +588,12 @@ def get_last_record(record_type: str = "") -> dict:
             "water": 10, "喝水": 10, "喂水": 10
         }
 
-        record_type_code = type_map.get(record_type) if record_type else None
+        record_type_code = None
+        if record_type:
+            record_type_code = type_map.get(record_type)
+            if record_type_code is None:
+                # 未知类型不应静默退化为「返回任意类型最近一条」
+                return {"success": False, "message": f"未知记录类型: {record_type}"}
         result = recorder.get_last_record(record_type_code)
 
         if result.get("success"):
@@ -590,9 +627,9 @@ def get_recent_records(size: int = 20) -> dict:
             data = result.get("data", {})
             records_summary = []
 
-            for day_item in data.get("list", [])[:3]:  # 只取最近3天
+            for day_item in data.get("list", []):
                 date = day_item.get("date", "")
-                for record in day_item.get("records", [])[:10]:  # 每天最多10条
+                for record in day_item.get("records", []):
                     records_summary.append({
                         "date": date,
                         "time": record.get("start_at", ""),
@@ -601,6 +638,7 @@ def get_recent_records(size: int = 20) -> dict:
                         "remark": record.get("remark", "")
                     })
 
+            # API 已按 size 返回，这里再按 size 截断输出，语义一致
             return {"success": True, "records": records_summary[:size]}
         return result
     except Exception as e:
@@ -635,20 +673,18 @@ def get_baby_info() -> dict:
         if not birthday:
             return {"success": False, "message": "未配置宝宝生日"}
 
-        # 计算年龄
+        # 计算年龄（复用日历算法，避免边界 bug）
         try:
             birthday_dt = datetime.strptime(birthday, "%Y-%m-%d")
             today = datetime.now()
-            days = (today - birthday_dt).days
-            months = days // 30
-            years = days // 365
-            remaining_months = (days % 365) // 30
+            years, months, _days, total_days = _age_components(birthday_dt, today)
 
             if years > 0:
-                age_str = f"{years}岁{remaining_months}个月"
+                age_str = f"{years}岁{months}个月"
             else:
                 age_str = f"{months}个月"
         except ValueError:
+            total_days = 0
             age_str = "未知"
 
         return {
@@ -656,7 +692,7 @@ def get_baby_info() -> dict:
             "birthday": birthday,
             "gender": "男孩" if baby_gender == 1 else "女孩",
             "gender_code": baby_gender,
-            "age_days": days,
+            "age_days": total_days,
             "age_str": age_str
         }
     except Exception as e:
