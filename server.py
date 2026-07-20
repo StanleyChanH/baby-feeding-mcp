@@ -5,15 +5,28 @@ from mcp.server.fastmcp import FastMCP
 import logging
 import requests
 import json
+import sys
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 import os
 
 # 加载环境变量
 load_dotenv()
 
-# 配置日志
+# 配置日志 —— stdout 留给 MCP stdio 通信，日志一律走 stderr
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stderr,
+)
 logger = logging.getLogger('baby_feeding_mcp')
+
+# 美柚/小智均为中国服务，统一用东八区，避免容器内 UTC 导致记录时间戳偏 8 小时
+CN_TZ = ZoneInfo("Asia/Shanghai")
+# HTTP 请求超时（连接, 读取）秒
+REQUEST_TIMEOUT = (5, 15)
 
 # 创建 MCP 服务器
 mcp = FastMCP("BabyFeedingRecord")
@@ -27,11 +40,13 @@ class BabyRecorder:
         self.baby_id = baby_id
         self.common_baby_id = common_baby_id
         self.baby_gender = baby_gender  # 0=女孩, 1=男孩
+        self.birthday_str = birthday_str
         self.birthday = None
 
         try:
             self.birthday = datetime.strptime(birthday_str, "%Y-%m-%d")
-            self.birthday_ms = int(self.birthday.timestamp() * 1000)
+            # 显式东八区，确定性计算（naive .timestamp() 依赖宿主 TZ，容器间不一致）
+            self.birthday_ms = int(self.birthday.replace(tzinfo=CN_TZ).timestamp() * 1000)
             logger.info(f"初始化完成: 生日 {birthday_str}, 性别 {'男孩' if baby_gender == 1 else '女孩'}")
         except ValueError:
             logger.error(f"生日格式错误: {birthday_str}")
@@ -43,6 +58,8 @@ class BabyRecorder:
             "source": "FamilyFullScreenHomeFragment:SeeyouActivity->HerSleepHomeActivity",
             "Content-Type": "application/json"
         }
+        # 连接池复用，避免每次请求重新 TCP+TLS 握手
+        self.session = requests.Session()
 
     def _get_times(self, start_at=None, end_at=None, duration_minutes=10):
         """智能时间计算"""
@@ -68,7 +85,9 @@ class BabyRecorder:
     def _post_request(self, payload, log_msg):
         """通用发送请求"""
         try:
-            response = requests.post(self.url, headers=self.headers, data=json.dumps(payload))
+            response = self.session.post(
+                self.url, headers=self.headers, data=json.dumps(payload), timeout=REQUEST_TIMEOUT
+            )
             if response.status_code == 200:
                 res = response.json()
                 if res.get("code") == 0:
@@ -237,7 +256,7 @@ class BabyRecorder:
         }
 
         try:
-            response = requests.get(list_url, headers=headers, params=params)
+            response = self.session.get(list_url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 res = response.json()
                 if res.get("code") == 0:
@@ -320,7 +339,7 @@ class BabyRecorder:
             "baby_gender": self.baby_gender
         }
 
-    def get_daily_change(self, birthday_str):
+    def get_daily_change(self):
         """获取宝宝每日变化建议"""
         age_params = self._calc_age_params()
         if not age_params:
@@ -328,15 +347,19 @@ class BabyRecorder:
 
         url = "https://gravidity.seeyouyima.com/v3/baby_grow/baby_change"
 
-        # 转换生日格式：2025-08-21 -> 20250821
-        bbday = birthday_str.replace("-", "")
+        # 转换生日格式：2025-08-21 -> 20250821（复用 __init__ 已解析的值，避免重复入参）
+        bbday = self.birthday_str.replace("-", "") if self.birthday_str else ""
+
+        # linggan 凭据从环境变量读取（历史硬编码值已迁移到 .env，并从 git 历史抹除）
+        linggan_token = os.getenv("LINGGAN_ACCESS_TOKEN", "")
+        linggan_info = os.getenv("LINGGAN_ACCESS_INFO", "")
 
         headers = {
             **self.headers,
             "bbid": str(self.common_baby_id),
             "bbday": bbday,
-            "linggan_access_info": "***REMOVED***",
-            "linggan_access_token": "***REMOVED***",
+            "linggan_access_info": linggan_info,
+            "linggan_access_token": linggan_token,
             "x-visit-mode": "1",
             "user-agent": self.headers["ua"]
         }
@@ -344,7 +367,7 @@ class BabyRecorder:
             del headers["Content-Type"]
 
         try:
-            response = requests.get(url, headers=headers, params=age_params)
+            response = self.session.get(url, headers=headers, params=age_params, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 res = response.json()
                 if res.get("code") == 0:
@@ -368,19 +391,27 @@ class BabyRecorder:
             return {"success": False, "message": f"网络异常: {str(e)}"}
 
 
-# 从环境变量加载配置
+# 单例：避免每次工具调用都重建 headers、解析生日、新建 Session
+_recorder_instance = None
+
+
 def get_recorder():
-    """获取BabyRecorder实例"""
-    token = os.getenv("BABY_TOKEN")
-    baby_id = os.getenv("BABY_ID")
-    common_baby_id = os.getenv("COMMON_BABY_ID")
-    birthday = os.getenv("BABY_BIRTHDAY")
-    baby_gender = int(os.getenv("BABY_GENDER", "1"))  # 默认男孩
+    """获取 BabyRecorder 单例实例"""
+    global _recorder_instance
+    if _recorder_instance is None:
+        token = os.getenv("BABY_TOKEN")
+        baby_id = os.getenv("BABY_ID")
+        common_baby_id = os.getenv("COMMON_BABY_ID")
+        birthday = os.getenv("BABY_BIRTHDAY")
+        # os.getenv 只在变量「未设置」时返回默认值；显式空串 BABY_GENDER= 会触发 int('')。
+        # `or "1"` 同时覆盖未设置与空串两种情况。
+        baby_gender = int(os.getenv("BABY_GENDER") or "1")  # 默认男孩
 
-    if not all([token, baby_id, common_baby_id, birthday]):
-        raise ValueError("请配置环境变量: BABY_TOKEN, BABY_ID, COMMON_BABY_ID, BABY_BIRTHDAY")
+        if not all([token, baby_id, common_baby_id, birthday]):
+            raise ValueError("请配置环境变量: BABY_TOKEN, BABY_ID, COMMON_BABY_ID, BABY_BIRTHDAY")
 
-    return BabyRecorder(token, int(baby_id), int(common_baby_id), birthday, baby_gender)
+        _recorder_instance = BabyRecorder(token, int(baby_id), int(common_baby_id), birthday, baby_gender)
+    return _recorder_instance
 
 
 # ============ MCP 工具定义 ============
@@ -585,9 +616,7 @@ def get_daily_change() -> dict:
     """
     try:
         recorder = get_recorder()
-        birthday = os.getenv("BABY_BIRTHDAY")
-        result = recorder.get_daily_change(birthday)
-        return result
+        return recorder.get_daily_change()
     except Exception as e:
         return {"success": False, "message": str(e)}
 
@@ -601,7 +630,7 @@ def get_baby_info() -> dict:
     """
     try:
         birthday = os.getenv("BABY_BIRTHDAY")
-        baby_gender = int(os.getenv("BABY_GENDER", "1"))
+        baby_gender = int(os.getenv("BABY_GENDER") or "1")
 
         if not birthday:
             return {"success": False, "message": "未配置宝宝生日"}
