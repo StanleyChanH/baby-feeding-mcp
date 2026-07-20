@@ -45,7 +45,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "mcp2xiaozhi", specifier = ">=0.2.0" },
+    { name = "mcp2xiaozhi", specifier = ">=0.2.1" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
 ]
@@ -311,7 +311,7 @@ wheels = [
 
 [[package]]
 name = "mcp2xiaozhi"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -322,9 +322,9 @@ dependencies = [
     { name = "typing-extensions", marker = "python_full_version < '3.12'" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d1/a6/231e0108ee19ec78ee8a087e9b2128d23c273a419fc007014bd3b71ccb4a/mcp2xiaozhi-0.2.0.tar.gz", hash = "sha256:f46d0342e8ef83da6b5f45ae32db109e773849808f929cd0333bd4366b22ff62", size = 40972, upload-time = "2026-07-10T03:16:36.127Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/c2/c6f45a6000ec2e11c6dc81f74dcc4da9b1bda84b76e45a5345572a496b53/mcp2xiaozhi-0.2.1.tar.gz", hash = "sha256:562e7cf065e53b2b4610513c7f9e742166ff8a92bc76a640d6b3e8fbf740f311", size = 41586, upload-time = "2026-07-20T04:53:49.823Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/5a/ae371316ed29e12d811bb3a14c72d60f7ea8d7ddb2e4ae87faba925cf027/mcp2xiaozhi-0.2.0-py3-none-any.whl", hash = "sha256:c1c1d4e3c7c55c1a802768350f277222dca409aabab2c8baa78eaa7865400250", size = 33299, upload-time = "2026-07-10T03:16:34.762Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/69/5101871555ebffbb90835d69f34fa40d5965f379f722eef9853bfcfd9d11/mcp2xiaozhi-0.2.1-py3-none-any.whl", hash = "sha256:a61474e1802222c14b853c825d3c7c81762d1e37541d691f36376c739b321a2a", size = 33485, upload-time = "2026-07-20T04:53:48.583Z" },
 ]
 
 [[package]]

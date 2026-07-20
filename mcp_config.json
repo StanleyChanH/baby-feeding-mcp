@@ -3,10 +3,7 @@
     "baby-feeding": {
       "type": "stdio",
       "command": "python",
-      "args": ["/app/server.py"],
-      "env": {
-        "_INHERIT_PARENT_ENV": "1"
-      }
+      "args": ["/app/server.py"]
     }
   }
 }
