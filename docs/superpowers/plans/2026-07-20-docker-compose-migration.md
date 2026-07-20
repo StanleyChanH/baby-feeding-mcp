@@ -1102,9 +1102,11 @@ Expected: 打印版本号。若无，回退用 `git filter-branch`（见 Step 3 
 Run:
 ```bash
 cat > /tmp/baby-token-replacements.txt <<'EOF'
-***REMOVED***==>***REMOVED***
-***REMOVED***==>***REMOVED***
+<LINGGAN_TOKEN_VALUE>==>***REMOVED***
+<LINGGAN_INFO_BASE64_VALUE>==>***REMOVED***
 EOF
+# 将上面两个占位符替换为真实值：它们是原始 server.py:338（commit 64957b4）里的
+#   linggan_access_token（32 位十六进制）与 linggan_access_info（base64 串）。
 cat /tmp/baby-token-replacements.txt
 ```
 Expected: 文件含两行 `旧值==>***REMOVED***`。
@@ -1121,8 +1123,8 @@ Expected: filter-repo 报告已重写若干 commit、替换若干处。注意：
 备注（filter-repo 不可用时的回退，较慢）：
 ```bash
 git filter-branch --force --tree-filter "
-  git grep -l '***REMOVED***' 2>/dev/null | xargs -r sed -i 's/***REMOVED***/***REMOVED***/g';
-  git grep -l '***REMOVED***' 2>/dev/null | xargs -r sed -i 's|***REMOVED***|***REMOVED***|g'
+  git grep -l '<LINGGAN_TOKEN_VALUE>' 2>/dev/null | xargs -r sed -i 's/<LINGGAN_TOKEN_VALUE>/***REMOVED***/g';
+  git grep -l '<LINGGAN_INFO_BASE64_VALUE>' 2>/dev/null | xargs -r sed -i 's|<LINGGAN_INFO_BASE64_VALUE>|***REMOVED***|g'
 " --prune-empty --tag-name-filter cat -- --all
 ```
 
@@ -1130,8 +1132,8 @@ git filter-branch --force --tree-filter "
 
 Run:
 ```bash
-git log --all -S '***REMOVED***' --oneline
-git log --all -S '***REMOVED***' --oneline
+git log --all -S '<LINGGAN_TOKEN_VALUE>' --oneline
+git log --all -S '<LINGGAN_INFO_BASE64_VALUE>' --oneline
 ```
 Expected: 两条命令均**无输出**（历史已干净）。若有输出，回到 Step 3 检查替换串拼写。
 

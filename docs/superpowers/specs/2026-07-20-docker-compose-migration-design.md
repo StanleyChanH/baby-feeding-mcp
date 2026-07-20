@@ -134,7 +134,7 @@
 
 ## 6. git 历史重写（用户已确认）
 
-`server.py:338` 的真实 token（`***REMOVED***` 与 base64 `***REMOVED***`）即使在 §4 移到 env，仍在历史 commit `64957b4` 中。
+`server.py:338` 的真实 token（`linggan_access_token` 的 32 位十六进制值与其 base64 `linggan_access_info`，具体字面量见原始 commit `64957b4`，此处不复述以免再次泄露）即使在 §4 移到 env，仍在历史 commit `64957b4` 中。
 
 - 用 `git filter-repo --replace-text`（不可用则 `git filter-branch`）替换上述两串为 `***REMOVED***`。
 - **会改写所有 commit hash**，需 force-push。
