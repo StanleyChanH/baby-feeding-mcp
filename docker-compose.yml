@@ -1,0 +1,20 @@
+# baby-feeding-mcp —— 持久化桥接服务
+# 1. cp .env.example .env 并填入 MCP_ENDPOINT / BABY_* / LINGGAN_*
+# 2. docker compose up -d --build
+services:
+  baby-feeding-mcp:
+    build: .
+    image: baby-feeding-mcp:latest
+    container_name: baby-feeding-mcp
+    restart: unless-stopped
+    init: true                # tini 作 PID1：转发 SIGTERM、回收僵尸子进程
+    env_file: .env
+    environment:
+      TZ: Asia/Shanghai       # 双保险（Dockerfile 已设）
+    volumes:
+      - ./mcp_config.json:/app/mcp_config.json:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,21 @@
+# 密钥绝不进镜像层
+.env
+.env.*
+
+# VCS 与虚拟环境
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude / IDE / 文档（运行时不需要）
+.claude/
+CLAUDE.md
+docs/
+
+# 旧文件（已删，保险）
+mcp_pipe.py
+start.sh
+requirements.txt
