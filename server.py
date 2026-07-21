@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 import logging
 import requests
 import json
+import signal
 import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -714,8 +715,26 @@ def validate_config():
     logger.info("配置验证通过")
 
 
+def _term_clean_exit(signum, frame):
+    """SIGTERM 处理：让 `docker stop` 得到干净的 exit 0。
+
+    背景：uvicorn 0.40.0 的 capture_signals 在优雅关闭（排空连接 + lifespan.shutdown）
+    之后会**故意重新抛出**捕获的信号（uvicorn/server.py:324-331）。对 SIGTERM，恢复的
+    默认处置是终止进程 → exit 143。这并非异常 kill（137 才是 SIGKILL），但会让某些编排
+    层把 143 当失败。
+
+    机制：在 mcp.run() 之前注册本处理器，uvicorn 的 capture_signals 会把它当作「原始」
+    处理器保存，并在关闭后恢复它（而非 SIG_DFL）来重抛 SIGTERM → 命中本处理器 →
+    SystemExit(0)。优雅关闭已由 uvicorn 在重抛之前完成，故「干净退出」与「优雅关闭」兼得。
+    必须在主线程注册（__main__ 块即主线程）。
+    """
+    raise SystemExit(0)
+
+
 # 启动服务器（streamable-http，默认 0.0.0.0:8000/mcp）
 if __name__ == "__main__":
     validate_config()
     logger.info(f"启动 streamable-http server: {os.getenv('HOST', '0.0.0.0')}:{os.getenv('PORT', '8000')}/mcp")
+    # 必须在 mcp.run() 之前注册，uvicorn 才会把它保存为「原始」处理器并在重抛 SIGTERM 时恢复
+    signal.signal(signal.SIGTERM, _term_clean_exit)
     mcp.run(transport="streamable-http")
