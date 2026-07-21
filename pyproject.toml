@@ -1,11 +1,11 @@
 [project]
 name = "baby-feeding-mcp"
-version = "1.0.0"
-description = "宝宝抚养记录 MCP Server - 接入小智AI"
+version = "1.1.0"
+description = "宝宝抚养记录 MCP Server（纯 streamable-http 服务，不连小智）"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "mcp2xiaozhi>=0.2.1",
+    "mcp>=1.0.0",
     "requests>=2.28.0",
     "python-dotenv>=1.0.0",
 ]

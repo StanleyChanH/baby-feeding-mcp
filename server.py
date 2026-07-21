@@ -29,7 +29,13 @@ CN_TZ = ZoneInfo("Asia/Shanghai")
 REQUEST_TIMEOUT = (5, 15)
 
 # 创建 MCP 服务器
-mcp = FastMCP("BabyFeedingRecord")
+# host/port 是 FastMCP 构造参数（不是 run() 参数），存入 settings 供 streamable-http 使用。
+# 默认 host=127.0.0.1 在容器内不可达，必须显式 0.0.0.0。
+mcp = FastMCP(
+    "BabyFeedingRecord",
+    host=os.getenv("HOST", "0.0.0.0"),
+    port=int(os.getenv("PORT", "8000")),
+)
 
 
 def _age_components(birthday, today):
@@ -708,7 +714,8 @@ def validate_config():
     logger.info("配置验证通过")
 
 
-# 启动服务器
+# 启动服务器（streamable-http，默认 0.0.0.0:8000/mcp）
 if __name__ == "__main__":
     validate_config()
-    mcp.run(transport="stdio")
+    logger.info(f"启动 streamable-http server: {os.getenv('HOST', '0.0.0.0')}:{os.getenv('PORT', '8000')}/mcp")
+    mcp.run(transport="streamable-http")
