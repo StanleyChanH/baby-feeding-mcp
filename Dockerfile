@@ -1,4 +1,4 @@
-# baby-feeding-mcp —— 由 mcp2xiaozhi 桥接 server.py 到小智AI
+# baby-feeding-mcp —— 纯 streamable-http MCP server（连小智由 XiaozhiMCPManager 负责）
 # 基础镜像靠宿主 daemon 的 registry-mirrors 加速（见 README）
 FROM python:3.12-slim
 
@@ -31,8 +31,10 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-# 再拷业务代码
-COPY server.py mcp_config.json ./
+# 再拷业务代码（纯 server，不再需要 mcp_config.json——清单归 manager）
+COPY server.py ./
 
-# mcp2xiaozhi 作桥接，按 mcp_config.json 拉起所有启用的 server
-CMD ["mcp2xiaozhi", "run", "--all"]
+EXPOSE 8000
+
+# 直接跑 streamable-http server（host/port 由 env 注入，compose 设 0.0.0.0:8000）
+CMD ["python", "server.py"]

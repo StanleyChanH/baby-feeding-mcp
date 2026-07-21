@@ -1,20 +1,31 @@
-# baby-feeding-mcp —— 持久化桥接服务
-# 1. cp .env.example .env 并填入 MCP_ENDPOINT / BABY_* / LINGGAN_*
-# 2. docker compose up -d --build
+# baby-feeding-mcp —— 纯 MCP server
+# 1. docker network create mcp-net（若没有）
+# 2. cp .env.example .env 填 BABY_* / LINGGAN_*（本服务不需要 MCP_ENDPOINT）
+# 3. docker compose up -d --build
+# 连小智请部署 XiaozhiMCPManager，其 mcp_config.json 指向 http://baby-feeding-mcp:8000/mcp
 services:
   baby-feeding-mcp:
     build: .
     image: baby-feeding-mcp:latest
-    container_name: baby-feeding-mcp
+    container_name: baby-feeding-mcp      # manager 靠此容器名寻址
     restart: unless-stopped
-    init: true                # tini 作 PID1：转发 SIGTERM、回收僵尸子进程
+    init: true
     env_file: .env
     environment:
-      TZ: Asia/Shanghai       # 双保险（Dockerfile 已设）
-    volumes:
-      - ./mcp_config.json:/app/mcp_config.json:ro
+      TZ: Asia/Shanghai
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    expose:
+      - "8000"                            # 仅 mcp-net 内可达，不映射宿主
+    # 本地调试可临时打开：ports: ["127.0.0.1:8000:8000"]
+    networks:
+      - mcp-net
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+networks:
+  mcp-net:
+    external: true

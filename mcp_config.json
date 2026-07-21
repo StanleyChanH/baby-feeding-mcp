@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "baby-feeding": {
-      "type": "stdio",
-      "command": "python",
-      "args": ["/app/server.py"]
-    }
-  }
-}
