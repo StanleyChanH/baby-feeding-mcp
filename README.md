@@ -18,65 +18,46 @@
 | `get_daily_change` | 获取每日变化建议 | 宝宝发育建议、身高体重参考 |
 | `get_baby_info` | 获取宝宝基本信息 | 宝宝多大、宝宝生日、宝宝性别 |
 
-## 快速开始（Docker Compose，推荐）
+## 这是什么
 
-1. 复制环境变量模板并填写：
+宝宝抚养记录的 **MCP server**（FastMCP streamable-http）。它只负责暴露 MCP 工具、调美柚 API 记录数据，**不连接小智**。要接入小智AI，请部署 [XiaozhiMCPManager](../XiaozhiMCPManager)，在它的 `mcp_config.json` 里指向本服务。
 
-```bash
-cp .env.example .env
-# 编辑 .env，填入 MCP_ENDPOINT / BABY_TOKEN / BABY_ID 等
-```
-
-2. 启动：
+## 快速开始（Docker Compose）
 
 ```bash
+# 一次性建共享网络（manager 与各 MCP 都用它）
+docker network create mcp-net
+
+cp .env.example .env   # 填 BABY_TOKEN / BABY_ID 等
 docker compose up -d --build
-docker compose logs -f
 ```
 
-容器内 `mcp2xiaozhi` 会自动连接小智AI 并桥接 `server.py` 的 MCP 工具。断线自动重连。
+服务在 `mcp-net` 内以 `http://baby-feeding-mcp:8000/mcp` 提供 streamable-http MCP 接口（不暴露宿主端口）。
 
-### 配置项说明
+### 配置项
 
 | 变量 | 说明 |
 |------|------|
-| `MCP_ENDPOINT` | 小智AI的MCP WebSocket接入点 |
-| `BABY_TOKEN` | 美柚API的授权Token（含空格务必加引号） |
-| `BABY_ID` | 宝宝ID |
-| `COMMON_BABY_ID` | 通用宝宝ID |
-| `BABY_BIRTHDAY` | 宝宝生日，格式 YYYY-MM-DD |
-| `BABY_GENDER` | 宝宝性别，0=女孩，1=男孩（默认） |
-| `LINGGAN_ACCESS_TOKEN` | 每日变化建议API凭据（可选，留空则该工具不可用） |
-| `LINGGAN_ACCESS_INFO` | 同上 |
-| `TZ` | 容器时区，默认 Asia/Shanghai |
-| `LOG_LEVEL` | 日志级别，默认 INFO |
+| `BABY_TOKEN` | 美柚API授权Token（含空格务必加引号） |
+| `BABY_ID` / `COMMON_BABY_ID` | 宝宝ID / 通用宝宝ID |
+| `BABY_BIRTHDAY` | 宝宝生日 YYYY-MM-DD |
+| `BABY_GENDER` | 0=女孩，1=男孩（默认） |
+| `LINGGAN_ACCESS_TOKEN` / `LINGGAN_ACCESS_INFO` | 每日变化建议API凭据（可留空） |
+| `HOST` / `PORT` | streamable-http 监听，默认 `0.0.0.0:8000` |
+| `TZ` / `LOG_LEVEL` | 时区 / 日志级别 |
 
-## 本地开发（不使用 Docker）
-
-需要 Python 3.11-3.12 与 [uv](https://docs.astral.sh/uv/)：
+## 本地开发（uv）
 
 ```bash
 uv sync
-# 直接调试 server.py（stdio）
-uv run python server.py
-# 或经 mcp2xiaozhi 桥接
-uv run mcp2xiaozhi run --all
+uv run python server.py                 # 启动 streamable-http，127.0.0.1:8000/mcp
 ```
+
+用 MCP Inspector 或任意 streamable-http 客户端连 `http://localhost:8000/mcp` 调试工具。
 
 ## 国内镜像加速
 
-构建时 pip 与 apt 已在 Dockerfile 内指向清华源。基础镜像 `python:3.12-slim` 默认从 Docker Hub 拉取，国内建议在 `/etc/docker/daemon.json` 配置 registry-mirrors：
-
-```json
-{
-  "registry-mirrors": [
-    "https://docker.mirrors.ustc.edu.cn",
-    "https://hub-mirror.c.163.com"
-  ]
-}
-```
-
-配置后 `sudo systemctl restart docker`。
+构建时 pip/apt 已指向清华源；基础镜像建议在 `/etc/docker/daemon.json` 配 `registry-mirrors`（详见 XiaozhiMCPManager README）。
 
 ## 工具参数详解
 
@@ -177,25 +158,24 @@ get_baby_info()  # 无参数
 
 ```
 baby-feeding-mcp/
-├── server.py            # MCP Server 主程序（FastMCP 工具）
-├── mcp_config.json      # mcp2xiaozhi 服务定义
-├── Dockerfile           # 镜像构建（uv + 国内源）
-├── docker-compose.yml   # 编排
+├── server.py            # MCP Server 主程序（FastMCP 工具，streamable-http）
+├── Dockerfile           # 镜像（uv + 国内源）
+├── docker-compose.yml   # 编排（external mcp-net）
 ├── .dockerignore
-├── .env.example         # 环境变量模板
+├── .env.example         # 环境变量模板（不含 MCP_ENDPOINT）
 ├── .env                 # 环境变量（自行创建，不提交）
-├── pyproject.toml       # 项目与依赖配置（uv 管理）
-├── uv.lock              # 依赖锁文件
+├── pyproject.toml       # 依赖（uv）
+├── uv.lock
 └── README.md
 ```
 
 ## 注意事项
 
-1. **不要使用 print()**：MCP Server 的 stdin/stdout 用于通信，请使用 `logger` 输出调试信息
+1. **不要使用 print()**：日志已配置到 stderr，请用 `logger` 输出调试信息（保持习惯，便于容器日志聚合）
 
 2. **返回值限制**：工具返回值限制在约 1024 字节内
 
-3. **自动重连**：`mcp2xiaozhi` 内置抖动指数退避重连，断线自动恢复
+3. **自动重连**：连小智的重连由 XiaozhiMCPManager 的 mcp2xiaozhi 负责；本服务只是无状态 MCP server
 
 4. **工具命名**：工具名和参数名要清晰明了，让大模型能理解用途
 
